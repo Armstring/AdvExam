@@ -24,10 +24,11 @@ train_data , test_data = read_MNIST(batch_size, test_batch_size)
 netD = _netD_mnist()
 netD.cuda()
 loss_func = nn.CrossEntropyLoss()
-#optimizerD = optim.Adam(netD.parameters(), lr=lr_D, betas=(0.9, 0.999))
 
-##### Train netD on real data
 '''
+##### Train netD on real data
+optimizerD = optim.Adam(netD.parameters(), lr=lr_D, betas=(0.9, 0.999))
+
 for epoch in range(epoch_num):
   running_loss = .0
   running_acc = .0
@@ -51,26 +52,26 @@ for epoch in range(epoch_num):
   print('Test accuracy of netD: %.3f'%(TestAcc(netD,test_data)))
 
 print('Finished Pre_train netD')
-torch.save(netD.state_dict(), './netD_baseline.pkl')
-'''
-netD.load_state_dict(torch.load('netD.pkl'))
-#print('Test accuracy of netD: %.3f'%(TestAcc(netD,test_data)))
+torch.save(netD.state_dict(), './netD.pkl')
 
+#netD.load_state_dict(torch.load('netD.pkl'))
+print('Test accuracy of netD: %.3f'%(TestAcc(netD,test_data)))
+'''
 ######################
 ## gap base
 adv_list = []
 label_list = []
 flag = 2
-step_num = 1
+step_num = 15
 path = "./adv_exam/"
-coef =6.5
-print('ll', flag, coef, step_num)
+coef = 1.5
+print('gradient', flag, coef, step_num)
 mag = .0
 
 for i,data_batch in enumerate(train_data):
   feature, label = data_batch
   feature_temp = feature[:].cuda()
-  perb_temp = advexam_gap(netD, feature, label, flag, coef, step_num)
+  perb_temp = advexam_gradient(netD, feature, label, flag, coef, step_num)
   if flag == 2:
     mag += torch.norm((feature_temp-perb_temp).view(64,-1), 2, 1).mean()
   else:
@@ -86,7 +87,9 @@ res = TestAdvAcc(netD,(adv_featureset, labelset))
 print('Adv accuracy of netD: %.3f'%(res))
 
 if flag=='sign':
-  torch.save((adv_featureset, labelset), path+'adv_ll_FGSM_step%d.pt'%(step_num))
+  torch.save((adv_featureset, labelset), path+'adv_gradient_FGSM_step%d.pt'%(step_num))
 else:
-  torch.save((adv_featureset, labelset), path+'adv_ll_L%d_step%d.pt'%(flag, step_num))
+  torch.save((adv_featureset, labelset), path+'adv_gradient_L%d_step%d.pt'%(flag, step_num))
+
+
 

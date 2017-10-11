@@ -13,62 +13,77 @@ def weights_init(layer):
 
 def accu(output, label):
   _, pred = torch.max(output, 1)
-  return 1.0*(pred.data==label.data).sum()/label.size()[0]
+  return 1.0*(pred.data==label.data).sum()
 
-def TestAcc(net, dataset):
+def TestAdvAcc_dataloader(net, dataset, flag, p_coef):
   adv_acc = .0
+  num = 0
+  net.eval()
+  for i,data_batch in enumerate(dataset):
+    feature, label = data_batch
+
+    perturb = torch.zeros(feature.size()).cuda()
+    feature, label = Variable(feature.cuda()), Variable(label.cuda())
+    perturb = Variable(perturb, requires_grad = True)
+    feature_adv = feature + perturb
+
+    outputs = net(feature_adv)
+    error = .0
+    for j in range(outputs.size()[0]):
+      error -= outputs[j][label.data[j]]
+    error.backward()
+    _, pred = torch.max(outputs, 1)
+    
+    for j,image in enumerate(feature):
+      if pred[j]==label[j]:
+        if flag=='sign':
+          perturb[j] +=  p_coef*torch.sign(perturb.grad[j])
+        else:
+          duel_norm = flag/(flag-1.0)
+          perturb[j] += p_coef * perturb.grad[j]/torch.norm(perturb.grad[j].data, p = duel_norm)
+    feature_adv = feature + perturb
+    feature_adv.data.clamp_(min=-1.0, max = 1.0)
+    outputs = net(feature_adv.detach())
+
+    adv_acc += accu(outputs, label)
+    num += label.size()[0]
+  return 1.0*adv_acc/num
+
+def TestAcc_dataloader(net, dataset):
+  acc = .0
   num = 0
   net.eval()
   for i,data_batch in enumerate(dataset):
     feature, label = data_batch
     feature, label = Variable(feature.cuda()), Variable(label.cuda())
     outputs = net(feature)
-    adv_acc += accu(outputs, label) * label.size()[0]
+    acc += accu(outputs, label)
     num += label.size()[0]
-  return 1.0*adv_acc/num
+  return 1.0*acc/num
 
-def TestAdvAcc(net, dataset):
-  adv_acc = .0
-  adv_feature, label = dataset
-  adv_dataset = torch.utils.data.DataLoader(torch.utils.data.TensorDataset(adv_feature, label),
+def TestAcc_tensor(net, dataset):
+  dataloader = torch.utils.data.DataLoader(torch.utils.data.TensorDataset(dataset[0], dataset[1]),
     batch_size=64, shuffle=True, drop_last = False)
-  num = 0
-  for i,data_batch in enumerate(adv_dataset):
-    adv_feature, label  = data_batch    
-    adv_feature, label  = Variable(adv_feature.cuda()), Variable(label.cuda()) 
-    outputs = net(adv_feature)
-    adv_acc += accu(outputs, label)* label.size()[0]
-    num += label.size()[0]
-  return 1.0*adv_acc/num
+  return TestAcc_dataloader(net, dataloader)
 
-def AdvAcc_exam(netD, advpath):
-  #path = './adv_exam/adv_FGSM_0.30.pt'
-  dataset_adv = torch.load(advpath)
-  test_adv_acc = TestAdvAcc(netD, dataset_adv)
-  return test_adv_acc
+def TestAcc_tensorpath(netD, advpath):
+  dataset = torch.load(advpath)
+  return TestAcc_tensor(netD, dataset_adv)
 
-def AdcAcc_net(netD, netG, testset, coef):
+def AdcAcc_Gnet(netD, netG, testset, coef):
   adv_acc = .0
-  #nz = 128
-  #batch_size = 64
-  #G_input = torch.FloatTensor(batch_size, nz).cuda()
   loss_func = nn.CrossEntropyLoss()
   for i,data_batch in enumerate(testset):
     #G_input.normal_(0,1)
     feature, label = data_batch
     feature, label = Variable(feature.cuda(),requires_grad = True), Variable(label.cuda())
     
-    #G_input_var = Variable(G_input)
-    #indd = torch.mm(label.cpu().view(-1,1), torch.autograd.Variable(torch.ones(1, ngf_netG).long())).cuda()
-    #indd = indd.view(-1,1,ngf_netG)
-
     outputs = netD(feature)
     error = loss_func(outputs, label)
     error.backward()
     perturb = feature.grad
     perturb = torch.sign(perturb)
     
-
     adv_perb = netG(feature)
     fake = feature + coef*adv_perb
     outputs = netD(fake)

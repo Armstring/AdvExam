@@ -21,12 +21,18 @@ epoch_num = 18
 lr_D = 0.001
 lr_G = 0.0005
 
+
+batch_size = 128
+test_batch_size = 1000
 ###################################
 ###perturbation magnitude for training
 coef_FGSM = 0.2
-coef_L2 = 6.2
+coef_L2 = 3.2
 
 coef_FGSM_gap = 0.3
 coef_L2_gap = 3.0
+
+coef_FGSM_ll = 0.3
+coef_L2_ll = 3.0
 
 coef_gan = 0.47
